@@ -252,6 +252,9 @@ class AsyncLLM(EngineClient):
         if engine_core_client := getattr(self, "engine_core_client", None):
             engine_core_client.shutdown()
 
+        if input_processor := getattr(self, "input_processor", None):
+            input_processor.close()
+
         handler = getattr(self, "output_handler", None)
         if handler is not None:
             cancel_task_threadsafe(handler)
