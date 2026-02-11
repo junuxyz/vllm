@@ -192,6 +192,7 @@ def rocm_aiter_fused_experts(
     num_local_tokens: torch.Tensor | None = None,
     output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
+    """ROCm AITER fused MoE expert computation."""
     if quant_config is None:
         quant_config = FUSED_MOE_UNQUANTIZED_CONFIG
 
@@ -287,16 +288,13 @@ def rocm_aiter_fused_experts(
 
 
 class AiterExperts(mk.FusedMoEPermuteExpertsUnpermute):
+    @property
+    def expects_unquantized_inputs(self) -> bool:
+        return True
+
     @staticmethod
     def activation_format() -> mk.FusedMoEActivationFormat:
         return mk.FusedMoEActivationFormat.Standard
-
-    @staticmethod
-    def expects_unquantized_inputs(
-        fused_moe_config: mk.FusedMoEConfig, quant_config: FusedMoEQuantConfig
-    ) -> bool:
-        # AITER fused MoE kernels handle input quantization internally.
-        return True
 
     @staticmethod
     def _supports_current_device() -> bool:
@@ -329,7 +327,7 @@ class AiterExperts(mk.FusedMoEPermuteExpertsUnpermute):
 
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
-        return True
+        return not moe_parallel_config.use_fi_all2allv_kernels
 
     def supports_expert_map(self):
         return True

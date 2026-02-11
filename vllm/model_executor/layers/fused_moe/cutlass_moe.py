@@ -103,7 +103,14 @@ def run_cutlass_moe_fp8(
         or a2_scale.size(0) == a1q.shape[0]
     ), "Intermediate scale shape mismatch"
     assert out_dtype in [torch.half, torch.bfloat16], "Invalid output dtype"
-    if expert_map is not None:
+
+    # NOTE(rob): the expert_map is used for the STANDARD case and
+    # the batched format is used by the BATCHED case.
+    # TODO(rob): update the MK interface to only pass the expert_map
+    # during the STANDARD case to make this clearer across all kernels.
+    if use_batched_format:
+        assert expert_num_tokens is not None
+    else:
         assert expert_num_tokens is None
 
     # We have two modes: batched experts and non-batched experts.
@@ -369,6 +376,8 @@ class CutlassExpertsFp8Base(mk.FusedMoEPermuteExpertsUnpermute):
 
 
 class CutlassExpertsFp8(CutlassExpertsFp8Base):
+    """CUTLASS FP8 fused MoE expert implementation."""
+
     @staticmethod
     def activation_format() -> mk.FusedMoEActivationFormat:
         return mk.FusedMoEActivationFormat.Standard
@@ -379,7 +388,10 @@ class CutlassExpertsFp8(CutlassExpertsFp8Base):
         # needed for STANDARD activation format kernels in DP/EP mode.
         # Note that the BATCHED activation format does not use
         # the expert map for identifying experts.
-        return not moe_parallel_config.use_all2all_kernels
+        return not (
+            moe_parallel_config.use_fi_all2allv_kernels
+            or moe_parallel_config.use_deepep_ht_kernels
+        )
 
     def supports_chunking(self) -> bool:
         return True
@@ -413,6 +425,8 @@ class CutlassExpertsFp8(CutlassExpertsFp8Base):
 
 
 class CutlassBatchedExpertsFp8(CutlassExpertsFp8Base):
+    """Batched CUTLASS FP8 fused MoE expert implementation."""
+
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         # BATCHED activation format works with EP because
@@ -641,15 +655,20 @@ def run_cutlass_moe_fp4(
 
 
 class CutlassExpertsFp4(mk.FusedMoEPermuteExpertsUnpermute):
-    @staticmethod
-    def expects_unquantized_inputs(
-        moe_config: FusedMoEConfig, quant_config: FusedMoEQuantConfig
-    ) -> bool:
+    """CUTLASS FP4 fused MoE expert implementation."""
+
+    @property
+    def expects_unquantized_inputs(self) -> bool:
         return True
 
     @staticmethod
     def _supports_current_device() -> bool:
-        return current_platform.has_device_capability((10, 0))
+        p = current_platform
+        return p.is_cuda() and (
+            p.is_device_capability_family(100)
+            or p.is_device_capability_family(110)
+            or p.is_device_capability_family(120)
+        )
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -1152,6 +1171,7 @@ def cutlass_moe_w4a8_fp8(
             quant_config=quant_config,
             group_size=group_size,
         ),
+        inplace=False,
     )
 
     return fn(

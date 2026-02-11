@@ -113,6 +113,8 @@ def _valid_deep_gemm(
 
 
 class DeepGemmExperts(mk.FusedMoEPermuteExpertsUnpermute):
+    """DeepGemm-based fused MoE expert implementation."""
+
     def __init__(self, moe_config: FusedMoEConfig, quant_config: FusedMoEQuantConfig):
         super().__init__(moe_config=moe_config, quant_config=quant_config)
         assert quant_config.block_shape == get_mk_alignment_for_contiguous_layout()
@@ -144,11 +146,12 @@ class DeepGemmExperts(mk.FusedMoEPermuteExpertsUnpermute):
 
     @staticmethod
     def _supports_activation(activation: str) -> bool:
-        return activation in ["silu"]
+        return activation in ["silu", "swiglustep"]
 
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
-        return True
+        # NOTE(rob): discovered an IMA with this combination. Needs investigation.
+        return not moe_parallel_config.use_fi_all2allv_kernels
 
     def supports_chunking(self) -> bool:
         return True
