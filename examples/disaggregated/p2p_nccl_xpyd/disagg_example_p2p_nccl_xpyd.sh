@@ -107,7 +107,7 @@ wait_for_server() {
   echo "Waiting for server on port $port..."
 
   while true; do
-    if curl -s "localhost:${port}/v1/completions" > /dev/null; then
+    if curl -sf "localhost:${port}/v1/models" > /dev/null; then
       echo "Server on port $port is ready."
       return 0
     fi
@@ -179,7 +179,7 @@ main() {
         --trust-remote-code \
         --gpu-memory-utilization 0.9 \
         --kv-transfer-config \
-        "{\"kv_connector\":\"P2pNcclConnector\",\"kv_role\":\"kv_producer\",\"kv_buffer_size\":\"1e1\",\"kv_port\":\"$kv_port\",\"kv_connector_extra_config\":{\"proxy_ip\":\"0.0.0.0\",\"proxy_port\":\"$PROXY_PORT\",\"http_port\":\"$port\",\"send_type\":\"PUT_ASYNC\",\"nccl_num_channels\":\"16\"}}" > prefill$((i+1)).log 2>&1 &
+        "{\"kv_connector\":\"P2pNcclConnector\",\"kv_role\":\"kv_producer\",\"kv_buffer_size\":\"8e9\",\"kv_port\":\"$kv_port\",\"kv_connector_extra_config\":{\"proxy_ip\":\"0.0.0.0\",\"proxy_port\":\"$PROXY_PORT\",\"http_port\":\"$port\",\"send_type\":\"PUT_ASYNC\",\"nccl_num_channels\":\"16\"}}" > prefill$((i+1)).log 2>&1 &
         PIDS+=($!)
     done
 
