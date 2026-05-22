@@ -21,7 +21,7 @@
 # =============================================================================
 
 # Configuration - can be overridden via environment variables
-MODEL=${MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+MODEL=${MODEL:-Qwen/Qwen3-0.6B}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-1200}
 PROXY_PORT=${PROXY_PORT:-30001}
 
@@ -124,7 +124,7 @@ wait_for_server() {
 
 main() {
     check_required_files
-    check_hf_token
+    # check_hf_token
     check_num_gpus
     ensure_python_library_installed pandas
     ensure_python_library_installed datasets
@@ -234,8 +234,8 @@ main() {
     cd ../../../benchmarks/
     vllm bench serve --port 10001 --seed "$(date +%s)" \
         --model "$MODEL" \
-        --dataset-name random --random-input-len 7500 --random-output-len 200 \
-        --num-prompts 200 --burstiness 100 --request-rate 2 | tee benchmark.log
+        --dataset-name random --random-input-len 512 --random-output-len 64 \
+        --num-prompts 20 --burstiness 1 --request-rate 1 | tee benchmark.log
 
     echo "Benchmarking done. Cleaning up..."
 
