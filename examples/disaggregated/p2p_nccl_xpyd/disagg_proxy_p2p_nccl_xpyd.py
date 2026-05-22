@@ -112,7 +112,7 @@ async def forward_request(url, data, request_id):
         }
         async with session.post(url=url, json=data, headers=headers) as response:
             if response.status == 200:
-                if True:
+                if data.get("stream", False):
                     async for chunk_bytes in response.content.iter_chunked(1024):
                         yield chunk_bytes
                 else:
