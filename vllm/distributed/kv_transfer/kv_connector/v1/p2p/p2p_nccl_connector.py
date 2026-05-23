@@ -202,6 +202,7 @@ class P2pNcclConnector(KVConnectorBase_V1):
         # Load the KV for each request each layer
         for request in metadata.requests:
             request_id = request.request_id
+            transfer_id = self.normalize_transfer_id(request_id)
             ip, port = self.parse_request_id(request_id, False)
             remote_address = ip + ":" + str(port + self._rank)
             for layer_name in forward_context.no_compile_layers:
@@ -216,8 +217,14 @@ class P2pNcclConnector(KVConnectorBase_V1):
 
                 layer = kv_cache
 
+                logger.warning(
+                    "[P2P DEBUG] raw_request_id=%s transfer_id=%s layer=%s",
+                    request_id,
+                    transfer_id,
+                    layer_name,
+                )
                 kv_cache = self.p2p_nccl_engine.recv_tensor(
-                    request.request_id + "#" + layer_name, remote_address
+                    transfer_id + "#" + layer_name, remote_address
                 )
 
                 if kv_cache is None:
@@ -298,12 +305,19 @@ class P2pNcclConnector(KVConnectorBase_V1):
         assert isinstance(connector_metadata, P2pNcclConnectorMetadata)
         for request in connector_metadata.requests:
             request_id = request.request_id
+            transfer_id = self.normalize_transfer_id(request_id)
             ip, port = self.parse_request_id(request_id, True)
             remote_address = ip + ":" + str(port + self._rank)
 
             kv_cache = extract_kv_from_layer(kv_layer, request.block_ids)
+            logger.warning(
+                "[P2P DEBUG] raw_request_id=%s transfer_id=%s layer=%s",
+                request_id,
+                transfer_id,
+                layer_name,
+            )
             self.p2p_nccl_engine.send_tensor(
-                request_id + "#" + layer_name, kv_cache, remote_address
+                transfer_id + "#" + layer_name, kv_cache, remote_address
             )
 
     def wait_for_save(self):
@@ -328,7 +342,12 @@ class P2pNcclConnector(KVConnectorBase_V1):
         assert self.p2p_nccl_engine is not None
 
         no_compile_layers = self._vllm_config.compilation_config.static_forward_context
-        return self.p2p_nccl_engine.get_finished(finished_req_ids, no_compile_layers)
+        normalized_finished_req_ids = {
+            self.normalize_transfer_id(request_id) for request_id in finished_req_ids
+        }
+        return self.p2p_nccl_engine.get_finished(
+            normalized_finished_req_ids, no_compile_layers
+        )
 
     # ==============================
     # Scheduler-side methods
@@ -498,6 +517,16 @@ class P2pNcclConnector(KVConnectorBase_V1):
     # ==============================
     # Static methods
     # ==============================
+
+    @staticmethod
+    def normalize_transfer_id(request_id: str) -> str:
+        match = re.search(
+            r"(___prefill_addr_.+?:\d+___decode_addr_.+?:\d+_[0-9a-fA-F]{32})",
+            request_id,
+        )
+        if match:
+            return match.group(1)
+        return request_id
 
     @staticmethod
     def parse_request_id(request_id: str, is_prefill=True) -> tuple[str, int]:
