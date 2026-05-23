@@ -238,6 +238,11 @@ class P2pNcclEngine:
         tensor: torch.Tensor,
         remote_address: str | None = None,
     ) -> bool:
+        print(
+            f"[P2P DEBUG] send_tensor tensor_id={tensor_id} "
+            f"remote={remote_address}",
+            flush=True,
+        )
         if remote_address is None:
             with self.recv_store_cv:
                 self.recv_store[tensor_id] = tensor
@@ -310,11 +315,21 @@ class P2pNcclEngine:
         tensor_id: str,
         remote_address: str | None = None,
     ) -> torch.Tensor:
+        print(
+            f"[P2P DEBUG] recv_tensor wait tensor_id={tensor_id} "
+            f"remote={remote_address}",
+            flush=True,
+        )
         if self.send_type == "PUT" or self.send_type == "PUT_ASYNC":
             start_time = time.time()
             with self.recv_store_cv:
                 while tensor_id not in self.recv_store:
-                    self.recv_store_cv.wait()
+                    print(
+                        f"[P2P DEBUG] waiting tensor_id={tensor_id}, "
+                        f"store_keys_sample={list(self.recv_store.keys())[:3]}",
+                        flush=True,
+                    )
+                    self.recv_store_cv.wait(timeout=5)
                 tensor = self.recv_store[tensor_id]
 
             if tensor is not None:
