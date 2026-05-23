@@ -105,18 +105,37 @@ def random_uuid() -> str:
 
 
 async def forward_request(url, data, request_id):
+    print(
+        f"[proxy] forward start url={url} "
+        f"stream={data.get('stream', False)} request_id={request_id}",
+        flush=True,
+    )
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
         headers = {
             "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
             "X-Request-Id": request_id,
         }
         async with session.post(url=url, json=data, headers=headers) as response:
+            print(
+                f"[proxy] response status url={url} status={response.status}",
+                flush=True,
+            )
             if response.status == 200:
                 if data.get("stream", False):
                     async for chunk_bytes in response.content.iter_chunked(1024):
+                        print(
+                            f"[proxy] stream chunk url={url} n={len(chunk_bytes)}",
+                            flush=True,
+                        )
                         yield chunk_bytes
+                    print(f"[proxy] stream done url={url}", flush=True)
                 else:
+                    print(f"[proxy] read start url={url}", flush=True)
                     content = await response.read()
+                    print(
+                        f"[proxy] read done url={url} n={len(content)}",
+                        flush=True,
+                    )
                     yield content
 
 
@@ -160,17 +179,21 @@ async def handle_request():
         )
 
         # finish prefill
+        print("[proxy] prefill start", flush=True)
         async for _ in forward_request(
             f"http://{prefill_addr}{request.path}", prefill_request, request_id
         ):
             continue
+        print("[proxy] prefill done", flush=True)
 
         # return decode
+        print("[proxy] decode start", flush=True)
         generator = forward_request(
             f"http://{decode_addr}{request.path}", original_request_data, request_id
         )
         response = await make_response(generator)
         response.timeout = None
+        print("[proxy] response returned to client", flush=True)
 
         return response
 
